@@ -1,0 +1,8 @@
+version: "3.9"
+services:
+  naver-dashboard:
+    build: .
+    container_name: naver-dashboard
+    ports:
+      - "8000:8000"
+    restart: unless-stopped

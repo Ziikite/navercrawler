@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Naver Search Analyst</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+/* ── DARK (default) ──────────────────────────────────────────────────────── */
+:root,
+[data-theme="dark"] {
+  --bg:      #070a0f;
+  --bg2:     #0c1018;
+  --bg3:     #111620;
+  --bg4:     #161c28;
+  --b1:      #1a2030;
+  --b2:      #232c3e;
+  --green:   #03c75a;
+  --red:     #ff4757;
+  --blue:    #3b82f6;
+  --amber:   #f59e0b;
+  --text:    #dde4f0;
+  --text2:   #7e8fa8;
+  --text3:   #3f4f66;
+  --shadow:  rgba(0,0,0,.4);
+  --grid-c:  rgba(3,199,90,.018);
+  --hdr-bg:  rgba(7,10,15,.92);
+  --load-bg: rgba(7,10,15,.9);
+  --inp-bg:  var(--bg);
+  --chart-grid: rgba(255,255,255,.05);
+  --chart-tooltip-bg: #111620;
+  --chart-tooltip-border: #1a2030;
+  --chart-label: #7e8fa8;
+  --net-link: #1c2535;
+  --net-text: #8fa0b8;
+}
+
+/* ── LIGHT ───────────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg:      #f2f4f7;
+  --bg2:     #ffffff;
+  --bg3:     #f7f8fa;
+  --bg4:     #eef0f4;
+  --b1:      #dde1e9;
+  --b2:      #c5cad6;
+  --green:   #00a847;
+  --red:     #e53935;
+  --blue:    #2563eb;
+  --amber:   #d97706;
+  --text:    #131b28;
+  --text2:   #4a5568;
+  --text3:   #94a3b8;
+  --shadow:  rgba(0,0,0,.1);
+  --grid-c:  rgba(0,0,0,.04);
+  --hdr-bg:  rgba(242,244,247,.95);
+  --load-bg: rgba(242,244,247,.9);
+  --inp-bg:  #ffffff;
+  --chart-grid: rgba(0,0,0,.06);
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-border: #dde1e9;
+  --chart-label: #4a5568;
+  --net-link: #cbd5e1;
+  --net-text: #475569;
+}
+
+/* ── RESET & BASE ────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Noto Sans KR', 'IBM Plex Mono', sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+  min-height: 100vh;
+  transition: background .25s, color .25s;
+}
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(var(--grid-c) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-c) 1px, transparent 1px);
+  background-size: 36px 36px;
+  pointer-events: none; z-index: 0;
+}
+
+/* ── HEADER ──────────────────────────────────────────────────────────────── */
+header {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 28px;
+  background: var(--hdr-bg);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--b1);
+  transition: background .25s, border-color .25s;
+}
+.logo { display: flex; align-items: center; gap: 10px; }
+.logo-icon {
+  width: 30px; height: 30px;
+  background: var(--green);
+  clip-path: polygon(0 0, 80% 0, 100% 20%, 100% 100%, 0 100%);
+  display: grid; place-items: center;
+}
+.logo-icon span { color: #fff; font-size: 14px; font-weight: 700; }
+.logo-name { font-family: 'IBM Plex Mono', monospace; font-size: 16px; font-weight: 600; letter-spacing: .06em; }
+.logo-name em { color: var(--green); font-style: normal; }
+.hdr-right { display: flex; align-items: center; gap: 14px; }
+
+/* NLP badges */
+.nlp-badge {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; letter-spacing: .07em;
+  padding: 4px 11px;
+  border: 1px solid var(--b2);
+  color: var(--text3);
+  border-radius: 2px;
+  transition: all .3s;
+}
+.nlp-badge.ok  { border-color: var(--green); color: var(--green); }
+.nlp-badge.err { border-color: var(--red);   color: var(--red); }
+.nlp-badge.wait { animation: blink .9s infinite; }
+@keyframes blink { 50% { opacity: .3; } }
+
+/* Clock */
+#clock { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--text2); }
+
+/* ── THEME TOGGLE ─────────────────────────────────────────────────────────── */
+.theme-toggle {
+  width: 42px; height: 24px;
+  background: var(--b2);
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: background .25s;
+  flex-shrink: 0;
+}
+.theme-toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--text2);
+  transition: transform .25s, background .25s;
+}
+[data-theme="light"] .theme-toggle { background: var(--green); }
+[data-theme="light"] .theme-toggle::after { transform: translateX(18px); background: #fff; }
+.theme-icon { font-size: 14px; user-select: none; cursor: pointer; }
+
+/* ── MAIN ────────────────────────────────────────────────────────────────── */
+main {
+  position: relative; z-index: 5;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px 28px 60px;
+}
+
+/* ── PANELS ──────────────────────────────────────────────────────────────── */
+.panel {
+  background: var(--bg2);
+  border: 1px solid var(--b1);
+  border-radius: 3px;
+  margin-bottom: 14px;
+  transition: background .25s, border-color .25s;
+}
+.panel-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 20px;
+  border-bottom: 1px solid var(--b1);
+  background: var(--bg3);
+  transition: background .25s, border-color .25s;
+}
+.panel-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: .13em; text-transform: uppercase;
+  color: var(--text2);
+  display: flex; align-items: center; gap: 8px;
+}
+.ptdot { width: 7px; height: 7px; border-radius: 50%; }
+.panel-body { padding: 20px; }
+
+/* cfg */
+.cfg-toggle { cursor: pointer; user-select: none; }
+.cfg-toggle:hover { background: var(--bg4); }
+.cfg-arrow { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text3); transition: transform .2s; }
+.cfg-arrow.open { transform: rotate(90deg); }
+#cfgBody { display: none; padding: 20px; border-top: 1px solid var(--b1); }
+#cfgBody.open { display: block; }
+
+/* ── FORMS ───────────────────────────────────────────────────────────────── */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.form-field label {
+  display: block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 6px;
+}
+input[type=text], input[type=password], input[type=date], input[type=number], select {
+  width: 100%;
+  background: var(--inp-bg);
+  border: 1px solid var(--b2);
+  color: var(--text);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  padding: 9px 13px;
+  outline: none;
+  border-radius: 2px;
+  transition: border-color .15s, box-shadow .15s, background .25s, color .25s;
+}
+input:focus, select:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(3,199,90,.12);
+}
+select {
+  cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237e8fa8'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  padding-right: 30px;
+}
+.btn-save {
+  background: var(--green); color: #fff;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px; font-weight: 600; letter-spacing: .08em;
+  border: none; padding: 9px 20px;
+  cursor: pointer; border-radius: 2px;
+  transition: opacity .15s;
+}
+.btn-save:hover { opacity: .85; }
+.save-note { font-size: 12px; color: var(--text3); margin-left: 10px; }
+
+/* ── SEARCH ROW ──────────────────────────────────────────────────────────── */
+.search-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.search-row .form-field     { flex: 2 1 200px; }
+.search-row .form-field.sm  { flex: 1 1 130px; }
+.search-row .form-field.xs  { flex: 0 1 90px; }
+.btn-analyze {
+  flex: 0 0 auto; height: 40px;
+  background: var(--green); color: #fff;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px; font-weight: 700; letter-spacing: .1em;
+  border: none; padding: 0 26px;
+  cursor: pointer; border-radius: 2px;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+  transition: opacity .15s;
+  white-space: nowrap; align-self: flex-end;
+}
+.btn-analyze:hover    { opacity: .85; }
+.btn-analyze:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── STATUS / ERROR ──────────────────────────────────────────────────────── */
+#statusBar {
+  display: none;
+  background: var(--bg3);
+  border: 1px solid var(--b1); border-left: 3px solid var(--green);
+  padding: 11px 20px; margin-bottom: 14px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px; color: var(--text2);
+  flex-wrap: wrap; gap: 22px;
+  transition: background .25s;
+}
+.sb-item strong { color: var(--green); }
+#errorBar {
+  display: none;
+  background: rgba(229,57,53,.08);
+  border: 1px solid var(--red);
+  padding: 11px 20px; margin-bottom: 14px;
+  font-size: 14px; color: var(--red);
+  white-space: pre-line; border-radius: 2px;
+}
+
+/* ── LOADING ─────────────────────────────────────────────────────────────── */
+#loadingOverlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 200;
+  background: var(--load-bg);
+  backdrop-filter: blur(6px);
+  place-items: center;
+}
+#loadingOverlay.show { display: grid; }
+.spinner {
+  width: 50px; height: 50px;
+  border: 2px solid var(--b2);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-steps { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--text2); margin-top: 8px; min-height: 46px; text-align: center; }
+.loading-steps .active { color: var(--green); }
+#loadingQuery { font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 600; color: var(--green); margin-bottom: 8px; }
+
+/* ── LATEST ARTICLES ─────────────────────────────────────────────────────── */
+.articles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; padding: 16px; }
+.art-card {
+  background: var(--bg3);
+  border: 1px solid var(--b1);
+  padding: 16px; border-radius: 3px;
+  transition: border-color .15s, background .25s;
+}
+.art-card:hover { border-color: var(--b2); }
+.art-rank { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--green); margin-bottom: 7px; }
+.art-title {
+  font-size: 14px; font-weight: 500; color: var(--text);
+  text-decoration: none;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  margin-bottom: 7px; line-height: 1.55; display: block;
+}
+.art-title:hover { color: var(--green); }
+.art-desc {
+  font-size: 12px; color: var(--text3);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  line-height: 1.65; margin-bottom: 8px;
+}
+.art-meta { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text3); }
+
+/* ── ANALYSIS GRID ───────────────────────────────────────────────────────── */
+.analysis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.span2 { grid-column: 1 / -1; }
+#freqBody { height: 460px; }
+
+/* ── SENTIMENT ───────────────────────────────────────────────────────────── */
+.senti-layout { display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: start; }
+.senti-donut-wrap { position: relative; width: 168px; height: 168px; }
+.senti-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; pointer-events: none; }
+.senti-score { font-family: 'IBM Plex Mono', monospace; font-size: 24px; font-weight: 600; color: var(--text); }
+.senti-score.pos { color: var(--green); }
+.senti-score.neg { color: var(--red); }
+.senti-sublabel { font-size: 11px; color: var(--text3); margin-top: 3px; }
+.senti-counts { display: flex; flex-direction: column; gap: 7px; margin-top: 14px; }
+.senti-row { display: flex; align-items: center; gap: 9px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+.sc-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.sc-label { color: var(--text2); flex: 1; }
+.sc-count { color: var(--text); font-weight: 600; }
+.senti-articles { overflow: hidden; }
+.senti-sec-title { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); margin-bottom: 9px; display: flex; align-items: center; gap: 6px; }
+.senti-list { display: flex; flex-direction: column; gap: 6px; }
+.senti-item { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; background: var(--bg4); border-left: 2px solid transparent; font-size: 13px; border-radius: 1px; transition: background .25s; }
+.senti-item.pos { border-left-color: var(--green); }
+.senti-item.neg { border-left-color: var(--red); }
+.senti-item-score { font-family: 'IBM Plex Mono', monospace; font-size: 12px; min-width: 38px; text-align: right; flex-shrink: 0; }
+.senti-item.pos .senti-item-score { color: var(--green); }
+.senti-item.neg .senti-item-score { color: var(--red); }
+.senti-item-title { color: var(--text2); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
+.senti-item-title a { color: inherit; text-decoration: none; }
+.senti-item-title a:hover { color: var(--green); }
+
+/* ── NETWORK ─────────────────────────────────────────────────────────────── */
+#networkWrap { width: 100%; min-height: 520px; position: relative; overflow: hidden; background: var(--bg); border-radius: 2px; transition: background .25s; }
+#networkWrap svg { display: block; }
+.net-legend { position: absolute; bottom: 14px; left: 16px; display: none; gap: 16px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text3); }
+.net-leg-item { display: flex; align-items: center; gap: 6px; }
+.net-leg-dot { width: 9px; height: 9px; border-radius: 50%; }
+.net-tooltip { position: absolute; background: var(--bg3); border: 1px solid var(--b2); padding: 7px 12px; pointer-events: none; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text); border-radius: 2px; white-space: nowrap; display: none; z-index: 10; transition: background .25s; }
+
+/* ── EMAIL PANEL ─────────────────────────────────────────────────────────── */
+.email-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+
+/* ── EMPTY ───────────────────────────────────────────────────────────────── */
+.empty { padding: 44px 20px; text-align: center; color: var(--text3); font-size: 14px; }
+.empty-icon { font-size: 34px; margin-bottom: 12px; opacity: .3; }
+.empty-t { font-size: 15px; font-weight: 600; color: var(--text2); margin-bottom: 5px; }
+
+/* ── SCROLLBAR ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--b2); border-radius: 3px; }
+
+/* ── RESPONSIVE ──────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .analysis-grid { grid-template-columns: 1fr; }
+  .span2 { grid-column: auto; }
+  .senti-layout { grid-template-columns: 1fr; }
+  .form-grid, .email-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  main { padding: 14px; }
+  header { padding: 12px 14px; }
+  .nlp-badge { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loadingOverlay">
+  <div style="text-align:center">
+    <div class="spinner"></div>
+    <div id="loadingQuery"></div>
+    <div class="loading-steps" id="loadingSteps">
+      <div id="ls1">① 네이버 API 검색 중...</div>
+      <div id="ls2" style="opacity:.3">② 전체 결과 수집 (페이지 순회)...</div>
+      <div id="ls3" style="opacity:.3">③ KoNLPy 형태소 분석...</div>
+      <div id="ls4" style="opacity:.3">④ KNU SentiLex 감정 채점...</div>
+      <div id="ls5" style="opacity:.3">⑤ 연관어 네트워크 생성...</div>
+    </div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon"><span>N</span></div>
+    <div class="logo-name">NAVER <em>ANALYST</em></div>
+  </div>
+  <div class="hdr-right">
+    <div class="nlp-badge wait" id="badgeKonlpy">KoNLPy ···</div>
+    <div class="nlp-badge wait" id="badgeSenti">SentiLex ···</div>
+    <div id="clock">--:--:--</div>
+    <span class="theme-icon" id="themeIcon" onclick="toggleTheme()" title="라이트/다크 전환">🌙</span>
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="테마 전환"></button>
+  </div>
+</header>
+
+<main>
+  <div id="errorBar"></div>
+
+  <!-- API CONFIG -->
+  <div class="panel">
+    <div class="panel-hdr cfg-toggle" id="cfgToggle">
+      <div class="panel-title"><div class="ptdot" style="background:var(--amber)"></div>API 설정 (Naver Developers)</div>
+      <div class="cfg-arrow open" id="cfgArrow">▶</div>
+    </div>
+    <div id="cfgBody" class="open">
+      <div class="form-grid">
+        <div class="form-field"><label>Client ID</label><input type="text" id="clientId" placeholder="애플리케이션 Client ID"></div>
+        <div class="form-field"><label>Client Secret</label><input type="password" id="clientSecret" placeholder="Client Secret"></div>
+      </div>
+      <button class="btn-save" onclick="saveKeys()">저장 (localStorage)</button>
+      <span class="save-note" id="saveNote"></span>
+    </div>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="panel">
+    <div class="panel-hdr"><div class="panel-title"><div class="ptdot" style="background:var(--green)"></div>검색 설정</div></div>
+    <div class="panel-body">
+      <div class="search-row">
+        <div class="form-field"><label>검색어</label><input type="text" id="queryInput" placeholder="예) 인공지능, 스타트업, ESG 경영" autocomplete="off"></div>
+        <div class="form-field sm"><label>검색 유형</label>
+          <select id="searchType">
+            <option value="news">뉴스</option>
+            <option value="blog">블로그</option>
+            <option value="web">웹문서</option>
+          </select>
+        </div>
+        <div class="form-field sm"><label>시작일</label><input type="date" id="dateFrom"></div>
+        <div class="form-field sm"><label>종료일</label><input type="date" id="dateTo"></div>
+        <div class="form-field xs"><label>최대 건수</label><input type="number" id="maxItems" value="300" min="10" max="1000"></div>
+        <button class="btn-analyze" id="btnAnalyze" onclick="doAnalyze()">▶ 분석 시작</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATUS -->
+  <div id="statusBar">
+    <span class="sb-item">총 <strong id="sbTotal">0</strong>건</span>
+    <span class="sb-item">기간 <strong id="sbRange">—</strong></span>
+    <span class="sb-item">검색어 <strong id="sbQuery">—</strong></span>
+    <span class="sb-item">유형 <strong id="sbType">—</strong></span>
+  </div>
+
+  <!-- LATEST 5 -->
+  <div class="panel">
+    <div class="panel-hdr">
+      <div class="panel-title"><div class="ptdot" style="background:var(--blue)"></div>최신 게시글 Top 5</div>
+      <span id="latestBadge" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text3)"></span>
+    </div>
+    <div id="latestBody"><div class="empty"><div class="empty-icon">📰</div><div class="empty-t">검색 결과가 여기에 표시됩니다</div><div>API 키와 검색어를 입력하고 분석을 시작하세요</div></div></div>
+  </div>
+
+  <!-- ANALYSIS GRID -->
+  <div class="analysis-grid">
+
+    <div class="panel">
+      <div class="panel-hdr">
+        <div class="panel-title"><div class="ptdot" style="background:var(--green)"></div>키워드 빈도 분석</div>
+        <span id="freqBadge" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text3)"></span>
+      </div>
+      <div class="panel-body" id="freqBody" style="height:460px">
+        <div class="empty"><div class="empty-icon">📊</div><div class="empty-t">빈도 분석 대기 중</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-hdr">
+        <div class="panel-title"><div class="ptdot" style="background:var(--amber)"></div>감정 분석 (KNU SentiLex)</div>
+        <span id="sentiBadge" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text3)"></span>
+      </div>
+      <div class="panel-body" id="sentiBody">
+        <div class="empty"><div class="empty-icon">💬</div><div class="empty-t">감정 분석 대기 중</div></div>
+      </div>
+    </div>
+
+    <div class="panel span2">
+      <div class="panel-hdr">
+        <div class="panel-title"><div class="ptdot" style="background:var(--red)"></div>연관어 네트워크 분석</div>
+        <span id="netBadge" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text3)"></span>
+      </div>
+      <div style="position:relative">
+        <div id="networkWrap" style="min-height:520px">
+          <div class="empty" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)">
+            <div class="empty-icon">🕸</div><div class="empty-t">네트워크 분석 대기 중</div>
+          </div>
+        </div>
+        <div class="net-legend" id="netLegend">
+          <div class="net-leg-item"><div class="net-leg-dot" style="background:var(--green)"></div>긍정</div>
+          <div class="net-leg-item"><div class="net-leg-dot" style="background:var(--red)"></div>부정</div>
+          <div class="net-leg-item"><div class="net-leg-dot" style="background:var(--blue)"></div>중립</div>
+        </div>
+        <div id="netTooltip" class="net-tooltip"></div>
+      </div>
+    </div>
+
+  </div><!-- /analysis-grid -->
+
+  <!-- EMAIL PANEL -->
+  <div class="panel" id="emailPanel" style="display:none">
+    <div class="panel-hdr">
+      <div class="panel-title"><div class="ptdot" style="background:var(--amber)"></div>분석 결과 이메일 발송</div>
+      <div id="emailStatus" style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text3)"></div>
+    </div>
+    <div class="panel-body">
+      <div class="email-grid">
+        <div class="form-field"><label>발신 이메일</label><input type="text" id="emailSender" placeholder="your@gmail.com"></div>
+        <div class="form-field">
+          <label>Gmail 앱 비밀번호 <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--blue);text-decoration:none;font-size:10px">발급 ↗</a></label>
+          <input type="password" id="emailPassword" placeholder="앱 비밀번호 16자리">
+        </div>
+        <div class="form-field"><label>수신 이메일</label><input type="text" id="emailRecipient" placeholder="recipient@example.com"></div>
+        <div class="form-field"><label>제목</label><input type="text" id="emailSubject" placeholder="네이버 검색 분석 리포트"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <button class="btn-analyze" id="btnSendEmail" onclick="doSendEmail()" style="background:var(--amber);clip-path:none;height:40px">✉ 이메일 발송</button>
+        <div style="font-size:12px;color:var(--text3);line-height:1.6">
+          HTML 리포트 + 키워드 CSV 첨부 · Gmail 사용 시
+          <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--blue)">앱 비밀번호</a> 필요
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const API = '';
+let _lastData = null;
+let _isDark = true;
+
+// ── CLOCK ─────────────────────────────────────────────────────────────────
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('ko-KR', { hour12: false });
+}, 1000);
+
+// ── THEME ─────────────────────────────────────────────────────────────────
+function toggleTheme() {
+  _isDark = !_isDark;
+  const theme = _isDark ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('themeIcon').textContent = _isDark ? '🌙' : '☀️';
+  localStorage.setItem('naver_theme', theme);
+  // re-render charts with correct colors if data exists
+  if (_lastData) {
+    renderFreq(_lastData.frequency || []);
+    renderSenti(_lastData.sentiment || {});
+    renderNet(_lastData.network || {});
+  }
+}
+// restore saved theme
+(function() {
+  const saved = localStorage.getItem('naver_theme');
+  if (saved === 'light') {
+    _isDark = false;
+    document.documentElement.setAttribute('data-theme', 'light');
+    document.getElementById('themeIcon').textContent = '☀️';
+  }
+})();
+
+// ── CONFIG PANEL TOGGLE ───────────────────────────────────────────────────
+document.getElementById('cfgToggle').addEventListener('click', () => {
+  const b = document.getElementById('cfgBody'), a = document.getElementById('cfgArrow');
+  const o = b.classList.toggle('open'); a.classList.toggle('open', o);
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+(function init() {
+  const id  = localStorage.getItem('naver_client_id');
+  const sec = localStorage.getItem('naver_client_secret');
+  if (id)  document.getElementById('clientId').value  = id;
+  if (sec) document.getElementById('clientSecret').value = sec;
+  if (id && sec) {
+    document.getElementById('cfgBody').classList.remove('open');
+    document.getElementById('cfgArrow').classList.remove('open');
+  }
+  const today = new Date();
+  const month = new Date(today); month.setMonth(month.getMonth() - 1);
+  document.getElementById('dateTo').value   = fmt(today);
+  document.getElementById('dateFrom').value = fmt(month);
+})();
+
+function fmt(d) { return d.toISOString().slice(0, 10); }
+
+function saveKeys() {
+  const id  = document.getElementById('clientId').value.trim();
+  const sec = document.getElementById('clientSecret').value.trim();
+  if (!id || !sec) { note('ID와 Secret 모두 입력하세요', true); return; }
+  localStorage.setItem('naver_client_id', id);
+  localStorage.setItem('naver_client_secret', sec);
+  note('✓ 저장됨');
+}
+function note(msg, err) {
+  const el = document.getElementById('saveNote');
+  el.textContent = msg; el.style.color = err ? 'var(--red)' : 'var(--green)';
+  setTimeout(() => { el.textContent = ''; }, 3000);
+}
+
+// ── NLP STATUS ────────────────────────────────────────────────────────────
+async function pollStatus() {
+  try {
+    const r = await fetch(`${API}/api/status`);
+    const d = await r.json();
+    setBadge('badgeKonlpy', d.konlpy?.ready,   d.konlpy?.error,   'KoNLPy');
+    const sl = d.sentilex;
+    setBadge('badgeSenti', sl?.loaded, sl?.error, sl?.loaded ? `SentiLex (${(sl.size||0).toLocaleString()}개)` : 'SentiLex');
+    if (d.konlpy?.ready && sl?.loaded) return;
+    setTimeout(pollStatus, 3000);
+  } catch {
+    setBadge('badgeKonlpy', false, '서버 오프라인', 'KoNLPy');
+    setTimeout(pollStatus, 5000);
+  }
+}
+function setBadge(id, ready, error, label) {
+  const el = document.getElementById(id);
+  if (error && !ready) { el.className = 'nlp-badge err'; el.textContent = typeof error === 'string' ? error : label + ' 오류'; }
+  else if (ready)      { el.className = 'nlp-badge ok';  el.textContent = '✓ ' + label; }
+  else                 { el.className = 'nlp-badge wait'; el.textContent = label + ' 로딩...'; }
+}
+pollStatus();
+
+document.getElementById('queryInput').addEventListener('keydown', e => { if (e.key === 'Enter') doAnalyze(); });
+
+// ── ANALYZE ───────────────────────────────────────────────────────────────
+async function doAnalyze() {
+  const cid = document.getElementById('clientId').value.trim();
+  const csc = document.getElementById('clientSecret').value.trim();
+  const qry = document.getElementById('queryInput').value.trim();
+  const stp = document.getElementById('searchType').value;
+  const df  = document.getElementById('dateFrom').value;
+  const dt  = document.getElementById('dateTo').value;
+  const mx  = parseInt(document.getElementById('maxItems').value) || 300;
+  if (!cid || !csc) { showErr('Client ID와 Secret을 API 설정에 입력하세요'); return; }
+  if (!qry)         { showErr('검색어를 입력하세요'); return; }
+  hideErr(); showLoading(qry); animSteps();
+  try {
+    const res = await fetch(`${API}/api/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: cid, client_secret: csc, query: qry,
+                             search_type: stp, date_from: df || null,
+                             date_to: dt || null, max_items: mx })
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'HTTP ' + res.status); }
+    const data = await res.json();
+    _lastData = data;
+    renderAll(data);
+    document.getElementById('emailPanel').style.display = 'block';
+  } catch (e) {
+    let msg = '분석 오류: ' + e.message;
+    if (e.message.includes('fetch') || e.message.includes('NetworkError'))
+      msg += '\n\n→ Python 서버가 실행 중인지 확인하세요:\n  docker-compose up -d';
+    showErr(msg);
+  } finally { hideLoading(); }
+}
+
+let _stepTimer = null;
+function animSteps() {
+  const ids = ['ls1','ls2','ls3','ls4','ls5'];
+  ids.forEach(id => { const e = document.getElementById(id); if(e){e.style.opacity='.3';e.classList.remove('active');} });
+  let i = 0;
+  _stepTimer = setInterval(() => {
+    if (i < ids.length) {
+      const e = document.getElementById(ids[i]); if(e){e.style.opacity='1';e.classList.add('active');}
+      if (i > 0) { const p = document.getElementById(ids[i-1]); if(p) p.classList.remove('active'); }
+      i++;
+    }
+  }, 1800);
+}
+function showLoading(q) { document.getElementById('loadingQuery').textContent = `"${q}"`; document.getElementById('loadingOverlay').classList.add('show'); document.getElementById('btnAnalyze').disabled = true; }
+function hideLoading()  { if (_stepTimer) clearInterval(_stepTimer); document.getElementById('loadingOverlay').classList.remove('show'); document.getElementById('btnAnalyze').disabled = false; }
+function showErr(msg)   { const el = document.getElementById('errorBar'); el.textContent = '⚠ ' + msg; el.style.display = 'block'; }
+function hideErr()      { document.getElementById('errorBar').style.display = 'none'; }
+
+// ── RENDER ALL ────────────────────────────────────────────────────────────
+function renderAll(d) {
+  const sb = document.getElementById('statusBar'); sb.style.display = 'flex';
+  document.getElementById('sbTotal').textContent = d.total.toLocaleString();
+  document.getElementById('sbRange').textContent = d.date_min && d.date_max ? `${d.date_min} ~ ${d.date_max}` : '날짜 정보 없음';
+  document.getElementById('sbQuery').textContent = d.query;
+  document.getElementById('sbType').textContent  = { news:'뉴스', blog:'블로그', web:'웹문서' }[d.search_type] || d.search_type;
+  renderLatest(d.latest || []);
+  renderFreq(d.frequency || []);
+  renderSenti(d.sentiment || {});
+  renderNet(d.network || {});
+}
+
+// ── LATEST 5 ──────────────────────────────────────────────────────────────
+function renderLatest(items) {
+  document.getElementById('latestBadge').textContent = items.length + '건';
+  if (!items.length) { document.getElementById('latestBody').innerHTML = '<div class="empty"><div class="empty-t">결과 없음</div></div>'; return; }
+  document.getElementById('latestBody').innerHTML = `<div class="articles-grid">${items.map((it, i) => `
+    <div class="art-card">
+      <div class="art-rank">#${i+1}${it.parsed_date ? ' · ' + it.parsed_date : ''}</div>
+      <a class="art-title" href="${esc(it.link)}" target="_blank" rel="noopener">${esc(it.title)}</a>
+      <div class="art-desc">${esc(it.description)}</div>
+      <div class="art-meta">${it.bloggername ? esc(it.bloggername) : ''}</div>
+    </div>`).join('')}</div>`;
+}
+
+// ── FREQUENCY CHART ───────────────────────────────────────────────────────
+let _fc = null;
+function renderFreq(freq) {
+  document.getElementById('freqBadge').textContent = `상위 ${freq.length}개`;
+  const body = document.getElementById('freqBody');
+  if (!freq.length) { body.innerHTML = '<div class="empty"><div class="empty-t">데이터 없음</div></div>'; return; }
+  body.innerHTML = '<canvas id="freqCanvas" style="max-height:440px"></canvas>';
+  if (_fc) _fc.destroy();
+  const top  = freq.slice(0, 20);
+  const grid = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim();
+  const lbl  = getComputedStyle(document.documentElement).getPropertyValue('--chart-label').trim();
+  const ttBg = getComputedStyle(document.documentElement).getPropertyValue('--chart-tooltip-bg').trim();
+  const ttBr = getComputedStyle(document.documentElement).getPropertyValue('--chart-tooltip-border').trim();
+  const grn  = getComputedStyle(document.documentElement).getPropertyValue('--green').trim();
+  _fc = new Chart(document.getElementById('freqCanvas').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: top.map(d => d.word),
+      datasets: [{ data: top.map(d => d.count),
+        backgroundColor: top.map((_, i) => hexAlpha(grn, 1 - i * .04)),
+        borderColor: hexAlpha(grn, .3),
+        borderWidth: 1, borderRadius: 2 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+        tooltip: { backgroundColor: ttBg, borderColor: ttBr, borderWidth: 1,
+          titleColor: getComputedStyle(document.documentElement).getPropertyValue('--text').trim(),
+          bodyColor: grn, callbacks: { label: c => ` ${c.raw.toLocaleString()}회` } } },
+      scales: {
+        x: { grid: { color: grid }, ticks: { color: lbl, font: { family: 'IBM Plex Mono', size: 12 } } },
+        y: { grid: { display: false }, ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--text').trim(), font: { family: 'Noto Sans KR', size: 13 } } }
+      }
+    }
+  });
+}
+
+// ── SENTIMENT ─────────────────────────────────────────────────────────────
+let _sc = null;
+function renderSenti(s) {
+  const total = (s.positive||0) + (s.negative||0) + (s.neutral||0);
+  document.getElementById('sentiBadge').textContent = `평균 ${s.average_score > 0 ? '+' : ''}${s.average_score ?? 0}점`;
+  const body = document.getElementById('sentiBody');
+  if (!total) { body.innerHTML = '<div class="empty"><div class="empty-t">감정 데이터 없음</div></div>'; return; }
+  const cls = s.average_score > 0 ? 'pos' : s.average_score < 0 ? 'neg' : '';
+  const lbl = s.average_score > 0 ? '긍정 우세' : s.average_score < 0 ? '부정 우세' : '중립';
+  body.innerHTML = `<div class="senti-layout">
+    <div>
+      <div class="senti-donut-wrap"><canvas id="sc" width="168" height="168"></canvas>
+        <div class="senti-center">
+          <div class="senti-score ${cls}">${s.average_score > 0 ? '+' : ''}${s.average_score ?? 0}</div>
+          <div class="senti-sublabel">${lbl}</div>
+        </div>
+      </div>
+      <div class="senti-counts">
+        <div class="senti-row"><div class="sc-dot" style="background:var(--green)"></div><span class="sc-label">긍정</span><span class="sc-count">${s.positive}건</span></div>
+        <div class="senti-row"><div class="sc-dot" style="background:var(--red)"></div><span class="sc-label">부정</span><span class="sc-count">${s.negative}건</span></div>
+        <div class="senti-row"><div class="sc-dot" style="background:var(--text3)"></div><span class="sc-label">중립</span><span class="sc-count">${s.neutral}건</span></div>
+      </div>
+    </div>
+    <div class="senti-articles">
+      <div class="senti-sec-title"><span style="color:var(--green)">▲</span> 긍정 상위 5</div>
+      <div class="senti-list" id="slPos"></div>
+      <div class="senti-sec-title" style="margin-top:16px"><span style="color:var(--red)">▼</span> 부정 상위 5</div>
+      <div class="senti-list" id="slNeg"></div>
+    </div>
+  </div>`;
+  if (_sc) _sc.destroy();
+  const ttBg = getComputedStyle(document.documentElement).getPropertyValue('--chart-tooltip-bg').trim();
+  const ttBr = getComputedStyle(document.documentElement).getPropertyValue('--chart-tooltip-border').trim();
+  const txtC = getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+  _sc = new Chart(document.getElementById('sc').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: ['긍정','부정','중립'],
+      datasets: [{ data: [s.positive, s.negative, s.neutral],
+        backgroundColor: ['rgba(3,199,90,.8)','rgba(255,71,87,.8)','rgba(148,163,184,.4)'],
+        borderColor: ['#03c75a','#ff4757','#94a3b8'], borderWidth: 1.5, hoverOffset: 4 }]
+    },
+    options: { responsive: false, cutout: '68%',
+      plugins: { legend: { display: false },
+        tooltip: { backgroundColor: ttBg, borderColor: ttBr, borderWidth: 1, titleColor: txtC, bodyColor: txtC } }
+    }
+  });
+  sentiList('slPos', s.top_positive || [], 'pos');
+  sentiList('slNeg', s.top_negative || [], 'neg');
+}
+function sentiList(id, items, cls) {
+  const el = document.getElementById(id); if (!el) return;
+  el.innerHTML = items.map(it =>
+    `<div class="senti-item ${cls}">
+      <div class="senti-item-score">${it.score > 0 ? '+' : ''}${it.score}</div>
+      <div class="senti-item-title"><a href="${esc(it.link)}" target="_blank" rel="noopener">${esc(it.title)}</a></div>
+    </div>`).join('');
+}
+
+// ── NETWORK (D3) ──────────────────────────────────────────────────────────
+function renderNet(net) {
+  const wrap = document.getElementById('networkWrap');
+  wrap.innerHTML = '';
+  const nodes = net.nodes || [], edges = net.edges || [];
+  document.getElementById('netBadge').textContent = `노드 ${nodes.length} · 엣지 ${edges.length}`;
+  document.getElementById('netLegend').style.display = 'none';
+  if (!nodes.length || !edges.length) {
+    wrap.innerHTML = '<div class="empty" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><div class="empty-icon">🕸</div><div class="empty-t">연결된 키워드 없음</div></div>';
+    return;
+  }
+  document.getElementById('netLegend').style.display = 'flex';
+
+  const cs   = getComputedStyle(document.documentElement);
+  const grn  = cs.getPropertyValue('--green').trim();
+  const red  = cs.getPropertyValue('--red').trim();
+  const blue = cs.getPropertyValue('--blue').trim();
+  const lnk  = cs.getPropertyValue('--net-link').trim();
+  const ntxt = cs.getPropertyValue('--net-text').trim();
+
+  const W = wrap.offsetWidth || 900, H = 520;
+  const svg = d3.select(wrap).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('width', W).attr('height', H);
+  const g   = svg.append('g');
+  svg.call(d3.zoom().scaleExtent([.25, 5]).on('zoom', e => g.attr('transform', e.transform)));
+
+  const vals = nodes.map(n => n.value);
+  const rSc  = d3.scaleSqrt().domain([d3.min(vals)||1, d3.max(vals)||1]).range([5, 26]);
+  const wts  = edges.map(e => e.weight);
+  const wSc  = d3.scaleLinear().domain([d3.min(wts)||1, d3.max(wts)||1]).range([.8, 5]);
+
+  const nmap = Object.fromEntries(nodes.map(n => [n.id, {...n}]));
+  const lks  = edges.map(e => ({ source: nmap[e.source] ?? e.source, target: nmap[e.target] ?? e.target, weight: e.weight }));
+  const nl   = Object.values(nmap);
+
+  const sim = d3.forceSimulation(nl)
+    .force('link',    d3.forceLink(lks).id(d => d.id).distance(d => 55 + 25/d.weight).strength(.6))
+    .force('charge',  d3.forceManyBody().strength(-200))
+    .force('center',  d3.forceCenter(W/2, H/2))
+    .force('collide', d3.forceCollide(d => rSc(d.value) + 4));
+
+  const link = g.append('g').selectAll('line').data(lks).join('line')
+    .attr('stroke', lnk).attr('stroke-width', d => wSc(d.weight)).attr('stroke-opacity', .9);
+
+  const nc = d => d.sentiment > 0 ? grn : d.sentiment < 0 ? red : blue;
+
+  const ng = g.append('g').selectAll('g').data(nl).join('g').attr('cursor', 'grab')
+    .call(d3.drag()
+      .on('start', (ev, d) => { if (!ev.active) sim.alphaTarget(.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag',  (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+      .on('end',   (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+    );
+
+  ng.append('circle').attr('r', d => rSc(d.value)).attr('fill', nc).attr('fill-opacity', .82).attr('stroke', nc).attr('stroke-width', 1.5).attr('stroke-opacity', .35);
+  ng.append('text').text(d => d.label).attr('text-anchor', 'middle').attr('dy', d => rSc(d.value) + 14).attr('font-size', 12).attr('fill', ntxt).attr('pointer-events', 'none');
+
+  const tt = document.getElementById('netTooltip');
+  ng.on('mouseover', (ev, d) => {
+      const sl = d.sentiment > 0 ? '긍정' : d.sentiment < 0 ? '부정' : '중립';
+      tt.style.display = 'block';
+      tt.innerHTML = `<strong>${d.label}</strong> &nbsp;·&nbsp; ${d.value}회 &nbsp;·&nbsp; ${sl}`;
+    })
+    .on('mousemove', ev => { const r = wrap.getBoundingClientRect(); tt.style.left = (ev.clientX - r.left + 14) + 'px'; tt.style.top = (ev.clientY - r.top - 10) + 'px'; })
+    .on('mouseleave', () => { tt.style.display = 'none'; });
+
+  sim.on('tick', () => {
+    link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    ng.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+}
+
+// ── EMAIL ─────────────────────────────────────────────────────────────────
+function doSendEmail() {
+  if (!_lastData) { alert('먼저 분석을 실행하세요'); return; }
+  const sender    = document.getElementById('emailSender').value.trim();
+  const password  = document.getElementById('emailPassword').value.trim();
+  const recipient = document.getElementById('emailRecipient').value.trim();
+  const subject   = document.getElementById('emailSubject').value.trim() ||
+                    `[NAVER ANALYST] "${_lastData.query}" 분석 리포트`;
+  if (!sender || !password || !recipient) { setEmailStatus('발신/수신 이메일과 앱 비밀번호를 모두 입력하세요', 'err'); return; }
+  setEmailStatus('발송 중...', 'wait');
+  document.getElementById('btnSendEmail').disabled = true;
+  fetch(API + '/api/send-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sender_email: sender, sender_password: password,
+      recipient_email: recipient, subject,
+      query: _lastData.query, search_type: _lastData.search_type,
+      total: _lastData.total, date_min: _lastData.date_min, date_max: _lastData.date_max,
+      frequency: _lastData.frequency || [], sentiment: _lastData.sentiment || {},
+      latest: _lastData.latest || [] })
+  })
+  .then(async r => { const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.detail || 'HTTP ' + r.status); setEmailStatus('✓ ' + d.message, 'ok'); })
+  .catch(e => setEmailStatus('✗ ' + e.message, 'err'))
+  .finally(() => { document.getElementById('btnSendEmail').disabled = false; });
+}
+function setEmailStatus(msg, type) {
+  const el = document.getElementById('emailStatus');
+  el.textContent = msg;
+  el.style.color = type === 'ok' ? 'var(--green)' : type === 'err' ? 'var(--red)' : 'var(--amber)';
+}
+
+// ── UTILITIES ─────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function hexAlpha(hex, alpha) {
+  const h = hex.replace('#','');
+  const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+</script>
+</body>
+</html>
