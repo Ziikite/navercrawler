@@ -27,7 +27,7 @@
 ### 방법 1 — Docker (권장)
 
 ```bash
-cd naver-dashboard
+cd 폴더 경로 입력
 docker-compose up -d --build
 
 # http://localhost:8000 접속
