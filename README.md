@@ -80,22 +80,6 @@ naver-dashboard/
 
 ---
 
-## 🌐 외부 배포
-
-**Railway (GitHub 연동, 무료)**
-```bash
-# GitHub Push 후 railway.app에서 연결
-# Root directory: backend
-# Start command: uvicorn main:app --host 0.0.0.0 --port $PORT
-```
-
-**Fly.io**
-```bash
-fly launch
-fly deploy
-```
-
----
 
 ## API 엔드포인트
 
